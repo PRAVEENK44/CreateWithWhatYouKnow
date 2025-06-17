@@ -1,26 +1,25 @@
-# Creative AI Project Generator 🎨🤖
+# Creative Project Idea Generator 💡
 
-This Streamlit application helps users combine their diverse skills and interests into unique project ideas, learning paths, or even career suggestions. It uses the Hugging Face Inference API to connect to a Large Language Model (currently configured for `TinyLlama/TinyLlama-1.1B-Chat-v1.0` or similar) to generate these creative outputs.
+This Streamlit application helps users combine their diverse skills and interests into unique project ideas. It uses a **local, lightweight text generation technique** (powered by `markovify`) to suggest simple project starting points. No external API keys or internet connection (beyond initially loading the application) are required.
 
 ## 🎯 Core Concept
 
 The agent takes 2 or more user-defined skills or interests and:
-- Understands their context.
-- Blends them creatively.
-- Generates a meaningful output, such as a project idea, suggested tools/technologies, and learning outcomes.
+- Uses a predefined corpus and Markov chains to generate a related sentence.
+- Combines this sentence with your skills into a simple project suggestion.
+- Provides generic prompts for tools and learning outcomes.
+
+**Note:** The ideas generated are simpler and less sophisticated than those from large AI models, but this tool runs entirely locally without needing API keys.
 
 ## 🛠️ Technical Stack
-- **Language Model Access**: Hugging Face Inference API
-- **Default Model Used**: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` (or other compatible small instruction-tuned models)
+- **Text Generation**: `markovify` (local Markov chain generator)
 - **Frontend**: Streamlit
 - **Core Logic**: Python
-- **API Client**: `huggingface_hub`
 
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
 - Python 3.7+
-- A Hugging Face User Access Token (API Key)
 
 ### 2. Setup
 1.  **Clone the repository (or download the files):**
@@ -29,7 +28,7 @@ The agent takes 2 or more user-defined skills or interests and:
     # git clone <repository_url>
     # cd creative_ai_agent
     ```
-    For now, ensure you have the `creative_ai_agent` directory with `app.py`, `llm_integration.py`, and `requirements.txt`.
+    Ensure you have the `creative_ai_agent` directory with `app.py`, `llm_integration.py`, and `requirements.txt`.
 
 2.  **Create and activate a virtual environment (recommended):**
     ```bash
@@ -42,53 +41,27 @@ The agent takes 2 or more user-defined skills or interests and:
     ```bash
     pip install -r requirements.txt
     ```
-    This will install `streamlit` and `huggingface_hub`.
-
-4.  **Set up your Hugging Face User Access Token:**
-    This application requires a Hugging Face User Access Token to function with the Inference API.
-    - You can generate a token from your Hugging Face account settings: [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens). A fine-grained token with "Read" access should be sufficient for inference.
-    - You need to set this token as an environment variable named `HF_TOKEN`.
-
-    **Linux/macOS:**
-    ```bash
-    export HF_TOKEN='your_hf_user_access_token_here'
-    ```
-    You can add this line to your shell's configuration file (e.g., `.bashrc`, `.zshrc`) for persistence.
-
-    **Windows (Command Prompt):**
-    ```bash
-    set HF_TOKEN=your_hf_user_access_token_here
-    ```
-    **Windows (PowerShell):**
-    ```bash
-    $env:HF_TOKEN='your_hf_user_access_token_here'
-    ```
-    For persistent storage on Windows, search for "environment variables" in the system settings.
-
-    **Important:** Do not hardcode your token directly into the Python scripts.
+    This will install `streamlit` and `markovify`.
 
 ### 3. Running the Application
-1.  Ensure your `HF_TOKEN` environment variable is set.
-2.  Navigate to the `creative_ai_agent` directory in your terminal.
-3.  Run the Streamlit application:
+1.  Navigate to the `creative_ai_agent` directory in your terminal.
+2.  Run the Streamlit application:
     ```bash
     streamlit run app.py
     ```
-4.  Open your web browser and go to the local URL provided by Streamlit (usually `http://localhost:8501`).
+3.  Open your web browser and go to the local URL provided by Streamlit (usually `http://localhost:8501`).
 
-## 📝 API Usage and Free Tier
-- The Hugging Face Inference API provides a free tier for making calls.
-- For basic free Hugging Face accounts, these free tier limits are generally quite small (e.g., a small amount of credits, "less than $0.10" per month was stated previously, but subject to change). Usage may be rate-limited or may consume these credits quickly.
-- Users with a Hugging Face PRO subscription typically get more generous monthly credits for the Inference API.
-- If the application shows errors related to rate limits or model loading, it might be due to these free tier constraints or the model being temporarily unavailable on the shared infrastructure.
+## 💡 Nature of Suggestions
+- The project ideas are generated using Markov chains based on a small, built-in corpus of text.
+- This means the suggestions are statistically generated and aim to provide a starting spark rather than a deeply analyzed plan.
+- The "Tools" and "What you'll learn" sections provide generic, randomized suggestions to complement the core idea.
 
-## 💡 Future Extensions
-As per the original issue, potential future extensions include:
+## 🔧 Future Extensions (Original Vision)
+The original vision for this project included more advanced AI capabilities. If a suitable environment for larger models or APIs becomes available, future extensions could include:
+- Integration with more powerful LLMs for higher-quality idea generation.
 - Multi-step planning for project breakdown.
 - Course recommenders.
 - Personalized long-term memory.
-- Team generation suggestions.
-- Image generation for visualizing ideas.
 
 ---
-Built by an AI Agent.
+Built by an AI Agent | Uses a local `markovify` generator.
