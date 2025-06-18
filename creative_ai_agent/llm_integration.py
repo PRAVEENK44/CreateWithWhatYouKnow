@@ -1,122 +1,164 @@
-import markovify # For text generation
-import random
+from huggingface_hub import InferenceClient, HfHubHTTPError
+import os
+import json # For safely parsing potential JSON in LLM response, though less likely needed here
 
-# --- Predefined Corpus for Markovify ---
-# This corpus should be diverse enough to generate somewhat varied sentences.
-# It's kept relatively small to be embedded directly.
-CORPUS = (
-    "Consider developing a new application that blends technology with artistic expression. "
-    "Explore how data analysis can reveal insights in creative fields. "
-    "Build a small project to learn coding and share your musical ideas. "
-    "Design an interactive experience that tells a story using psychological principles. "
-    "A fun challenge is to combine your interest in biology with game development. "
-    "You could create a tool to help visualize complex information for others. "
-    "What if you made a learning roadmap for your unique skill set and shared it? "
-    "Try to find a project that uses both your analytical and creative talents daily. "
-    "Investigate the intersection of historical events and modern data representation. "
-    "Develop a platform for community collaboration on art projects. "
-    "Learn about machine learning by building a simple recommendation system. "
-    "Create a digital narrative that adapts to user choices and skills. "
-    "Study how environmental science can be communicated through interactive design. "
-    "Build a personal website that showcases your combined abilities effectively. "
-    "A great idea is to write a series of articles about the future of combined disciplines. "
-    "How about making a short film that explains a scientific concept through art? "
-    "Develop educational material that makes complex topics engaging and accessible. "
-    "Start by sketching out a plan for a project that truly excites your passions. "
-    "Think about how your unique skills can solve a real-world problem in a novel way. "
-    "Perhaps you could design a workshop to teach others how to blend their own skills."
-)
+# --- Hugging Face Inference Client Initialization ---
+HF_TOKEN = os.environ.get("HF_TOKEN")
+MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # Selected model
 
-# Build the Markovify model from the corpus once when the module is loaded.
-TEXT_MODEL = None
-try:
-    TEXT_MODEL = markovify.Text(CORPUS, state_size=2) # state_size=2 is default, good for small corpus
-    print("Markovify model built successfully from predefined corpus.")
-except Exception as e:
-    print(f"Error building Markovify model: {e}. Text generation will be very basic.")
-    TEXT_MODEL = None
+if not HF_TOKEN:
+    print("Warning: HF_TOKEN environment variable not found. Hugging Face Inference API calls will fail.")
+    # Application will likely fail later if this is the case, but we let it try.
 
+def create_prompt_messages(skill1: str, skill2: str, skill3: str = None) -> list:
+    """
+    Creates a list of messages formatted for the Hugging Face Inference API's
+    chat_completion endpoint, compatible with models like TinyLlama.
+    """
+    system_message = (
+        "You are a highly creative AI assistant. Your task is to generate a unique and "
+        "actionable project idea that combines the user-provided skills or interests. "
+        "Please provide the output in a structured format as described by the user, "
+        "using the exact labels: Project Title, Project Description, Suggested Tools/Technologies, "
+        "What you'll learn, Difficulty Level, Time to Complete."
+    )
 
-def generate_markovify_sentence(max_chars=150, default_sentence="Consider exploring a new creative project."):
-    """Generates a sentence using the Markovify model."""
-    if TEXT_MODEL:
-        try:
-            sentence = TEXT_MODEL.make_short_sentence(max_chars, tries=100)
-            if sentence:
-                return sentence.strip()
-        except Exception as e:
-            print(f"Error generating sentence with Markovify: {e}")
-    # Fallback if model failed or sentence generation didn't work
-    return default_sentence
+    user_prompt_parts = [
+        f"Skill 1: {skill1}",
+        f"Skill 2: {skill2}"
+    ]
+    if skill3 and skill3.strip():
+        user_prompt_parts.append(f"Skill 3: {skill3.strip()}")
 
+    user_prompt_parts.extend([
+        "\nPlease generate:",
+        "1. Project Title: (A concise and creative title)",
+        "2. Project Description: (1-2 sentences explaining the core idea)",
+        "3. Suggested Tools/Technologies: (e.g., Python, specific libraries, hardware)",
+        "4. What you'll learn: (Key skills or concepts gained)",
+        "5. Difficulty Level: (e.g., Beginner, Intermediate, Advanced)",
+        "6. Time to Complete: (e.g., 1-2 weeks, 1 month)",
+        "\nExample:",
+        "Project Title: AI Story Weaver",
+        "Project Description: An AI that co-writes a story with a user, adapting to their input.",
+        "Suggested Tools/Technologies: Python, Transformers, NLTK",
+        "What you'll learn: NLP, prompt engineering, creative writing techniques",
+        "Difficulty Level: Intermediate",
+        "Time to Complete: 2-3 weeks"
+    ])
+    user_message = "\n".join(user_prompt_parts)
+
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": user_message},
+    ]
+    return messages
 
 def get_creative_idea(skill1: str, skill2: str, skill3: str = None) -> dict:
     """
-    Generates a basic project idea using Markovify and templates.
-    Returns a dictionary with project details.
+    Gets a creative project idea using the Hugging Face Inference API.
+    Returns a dictionary with project details or an error message.
     """
+    if not HF_TOKEN:
+        return {"error": "Hugging Face API token (HF_TOKEN) is not configured. Please set the HF_TOKEN environment variable."}
 
-    # 1. Generate a base sentence from Markovify
-    markov_sentence = generate_markovify_sentence()
+    client = InferenceClient(model=MODEL_NAME, token=HF_TOKEN)
+    messages = create_prompt_messages(skill1, skill2, skill3)
 
-    # 2. Create a title and description using skills and the generated sentence
-    skills_list = [skill1, skill2]
-    if skill3 and skill3.strip():
-        skills_list.append(skill3.strip())
+    try:
+        response = client.chat_completion(
+            messages=messages,
+            max_tokens=500, # Max new tokens to generate
+            temperature=0.7,
+            top_p=0.95,
+            # stream=False is default
+        )
 
-    skills_string = ", ".join(skills_list[:-1]) + (f" and {skills_list[-1]}" if len(skills_list) > 1 else skills_list[0])
+        if response.choices and len(response.choices) > 0:
+            content = response.choices[0].message.content.strip()
+        else:
+            return {"error": "Received an empty or invalid response from the Hugging Face Inference API."}
 
-    project_title = f"Creative Fusion: {skills_string}"
-    project_description = f"Considering your skills in {skills_string}, how about this: {markov_sentence}"
+    except HfHubHTTPError as e:
+        error_message = f"Hugging Face API error: {str(e)}"
+        if e.response:
+            error_message += f" (Status: {e.response.status_code}, Details: {e.response.text})"
+        if "is currently loading" in str(e).lower() or (e.response and e.response.status_code == 503):
+            error_message = f"The model ({MODEL_NAME}) is currently loading on Hugging Face Inference API. Please try again in a few moments."
+        elif "Rate limit exceeded" in str(e) or (e.response and e.response.status_code == 429):
+            error_message = "Hugging Face Inference API rate limit exceeded. Please try again later or check your plan."
+        return {"error": error_message}
+    except Exception as e:
+        return {"error": f"An unexpected error occurred while contacting Hugging Face API: {str(e)}"}
 
-    # 3. Generic or very simply tailored suggestions for other fields
-    tools_suggestions = [
-        "your favorite search engine for research", "a notebook for ideas",
-        "standard office software", "Python (if coding is involved)",
-        "Canva or Figma (for design aspects)", "GitHub (for version control)"
-    ]
-    random.shuffle(tools_suggestions) # Add some slight variety
-    tools = ", ".join(tools_suggestions[:3])
-
-    learn_suggestions = [
-        "how to blend different disciplines", "project planning and execution",
-        "creative problem-solving", "researching new topics",
-        "communicating your ideas", "adapting to new challenges"
-    ]
-    random.shuffle(learn_suggestions)
-    learn = ", ".join(learn_suggestions[:3])
-
-    difficulty_options = ["Beginner-friendly to start", "Scalable to your comfort level", "Adaptable difficulty"]
-    time_estimate_options = ["Flexible: 1-2 weeks for a basic version", "Depends on your scope and depth", "A weekend to a month"]
-
-    parsed_output = {
-        "project_title": project_title,
-        "project_description": project_description,
-        "tools": tools,
-        "learn": learn,
-        "difficulty": random.choice(difficulty_options),
-        "time_estimate": random.choice(time_estimate_options)
+    parsed_output = {}
+    key_mapping = {
+        "Project Title": "project_title",
+        "Project Description": "project_description",
+        "Suggested Tools/Technologies": "tools",
+        "What you'll learn": "learn",
+        "Difficulty Level": "difficulty",
+        "Time to Complete": "time_estimate"
     }
 
-    # This implementation does not have external API calls, so network errors are not expected.
-    # It's designed to always return a dictionary.
+    lines = content.split('\n')
+    if not lines or (len(lines) == 1 and not any(key in lines[0] for key in key_mapping)):
+        if len(content) < 200 and not any(key + ":" in content for key in key_mapping): # Heuristic
+             return {"error": f"Model did not return a structured idea. Response: {content}"}
+
+    for line in lines:
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        found_key = False
+        for key_prompt, key_dict in key_mapping.items():
+            if line_stripped.lower().startswith(key_prompt.lower() + ":"):
+                value = line_stripped.split(":", 1)[1].strip()
+                parsed_output[key_dict] = value
+                found_key = True
+                break
+            elif line_stripped.lower().startswith(str(list(key_mapping.keys()).index(key_prompt) + 1) + ". " + key_prompt.lower() + ":"):
+                value = line_stripped.split(":", 1)[1].strip()
+                parsed_output[key_dict] = value
+                found_key = True
+                break
+
+    expected_dict_keys = ["project_title", "project_description", "tools", "learn", "difficulty", "time_estimate"]
+    for k in expected_dict_keys:
+        if k not in parsed_output:
+            parsed_output[k] = "Not specified by AI."
+
+    if parsed_output.get("project_title", "Not specified by AI.") == "Not specified by AI.":
+        parsed_output["project_description"] = f"AI response (parsing failed or incomplete): {content}"
 
     return parsed_output
 
 if __name__ == '__main__':
-    print("--- Testing Local Basic Generator ---")
+    print("--- Testing Hugging Face Inference API Integration ---")
+    if not HF_TOKEN:
+        print("HF_TOKEN environment variable not set. Cannot run live tests.")
+    else:
+        print(f"Using model: {MODEL_NAME} via Hugging Face Inference API.")
 
-    print("\nAttempting to get a creative idea for 'Python' and 'Music'...")
-    idea1 = get_creative_idea("Python", "Music")
-    for key, value in idea1.items():
-        print(f"{key.replace('_', ' ').title()}: {value}")
+        print("\nAttempting to get a creative idea for 'Python' and 'Music'...")
+        idea1 = get_creative_idea("Python", "Music")
+        if "error" in idea1:
+            print(f"Error: {idea1['error']}")
+            if "raw_content" in idea1:
+                 print(f"Raw Content:\n{idea1['raw_content']}")
+        else:
+            print("\n--- Idea for Python & Music ---")
+            for key, value in idea1.items():
+                print(f"{key.replace('_', ' ').title()}: {value}")
 
-    print("\nAttempting to get a creative idea for 'Art', 'Biology', and 'Storytelling'...")
-    idea2 = get_creative_idea("Art", "Biology", "Storytelling")
-    for key, value in idea2.items():
-        print(f"{key.replace('_', ' ').title()}: {value}")
-
-    print("\nAttempting to get a creative idea for 'Cooking' (single skill)...")
-    idea3 = get_creative_idea("Cooking", "") # Test with one skill effectively
-    for key, value in idea3.items():
-        print(f"{key.replace('_', ' ').title()}: {value}")
+        print("\nAttempting to get a creative idea for 'Art', 'Biology', and 'Storytelling'...")
+        idea2 = get_creative_idea("Art", "Biology", "Storytelling")
+        if "error" in idea2:
+            print(f"Error: {idea2['error']}")
+            if "raw_content" in idea2:
+                 print(f"Raw Content:\n{idea2['raw_content']}")
+        else:
+            print("\n--- Idea for Art, Biology & Storytelling ---")
+            for key, value in idea2.items():
+                print(f"{key.replace('_', ' ').title()}: {value}")

@@ -1,2 +1,2 @@
 streamlit
-markovify
+huggingface_hub
